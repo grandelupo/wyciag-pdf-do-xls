@@ -30,22 +30,54 @@ pip install -r requirements.txt
 
 ## Usage
 
-### Basic usage (output will have the same name as input with .xlsx extension):
+### Process a single file (output will have the same name as input with .xlsx extension):
 ```bash
 python pdf_to_xls.py statement.pdf
 ```
 
-### Specify custom output file:
+### Specify custom output file for single file:
 ```bash
 python pdf_to_xls.py statement.pdf output.xlsx
 ```
 
-### Example with the provided file:
+### Process all PDF files in a folder:
+```bash
+python pdf_to_xls.py /path/to/folder
+```
+
+This will:
+- Find all `.pdf` files in the specified folder
+- Convert each one to a corresponding `.xlsx` file in the same folder
+- Display a summary of successful and failed conversions
+
+### Process folder and merge all outputs into one combined file:
+```bash
+python pdf_to_xls.py /path/to/folder --merge
+```
+
+This will:
+- Process all PDF files in the folder (creating individual `.xlsx` files)
+- Automatically merge all the Excel files into one combined file: `combined_all_statements.xlsx`
+- Sort all transactions by date in the combined file
+
+You can also specify a custom name for the combined file:
+```bash
+python pdf_to_xls.py /path/to/folder --merge my_combined_file.xlsx
+```
+
+### Example with a single file:
 ```bash
 python pdf_to_xls.py example-statement.pdf
 ```
 
 This will create: `example-statement.xlsx`
+
+### Example with a folder:
+```bash
+python pdf_to_xls.py ./statements/
+```
+
+This will process all PDF files in the `statements` folder and create corresponding Excel files in the same location.
 
 ## Example Output
 
@@ -68,6 +100,13 @@ The script:
 2. Identifies transaction lines using pattern matching for dates and amounts
 3. Parses transaction details including dates, amounts, counterparties, and descriptions
 4. Exports the data to a formatted Excel file
+
+When using folder mode with `--merge`:
+1. Processes each PDF file individually (creating separate `.xlsx` files)
+2. Reads all the generated Excel files
+3. Combines all transactions into a single dataframe
+4. Sorts all transactions chronologically by date
+5. Saves the combined result to a single Excel file
 
 ## Troubleshooting
 

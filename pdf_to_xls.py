@@ -193,55 +193,183 @@ def save_to_excel(transactions, output_path):
     
     # Save to Excel
     df.to_excel(output_path, index=False, engine='openpyxl')
-    print(f"✓ Saved {len(transactions)} transactions to {output_path}")
+    print(f"  ✓ Saved {len(transactions)} transactions to {output_path}")
 
 
-def main():
-    """Main function to process PDF to Excel conversion."""
-    if len(sys.argv) < 2:
-        print("Usage: python pdf_to_xls.py <pdf_file> [output_file.xlsx]")
-        print("\nExample:")
-        print("  python pdf_to_xls.py statement.pdf")
-        print("  python pdf_to_xls.py statement.pdf output.xlsx")
-        sys.exit(1)
+def merge_excel_files(excel_files, output_path):
+    """
+    Merge multiple Excel files into one combined file.
     
-    pdf_path = Path(sys.argv[1])
+    Args:
+        excel_files: List of paths to Excel files to merge
+        output_path: Path where to save the combined Excel file
+        
+    Returns:
+        Total number of transactions in the combined file
+    """
+    all_transactions = []
     
-    if not pdf_path.exists():
-        print(f"Error: File '{pdf_path}' not found")
-        sys.exit(1)
+    for excel_file in excel_files:
+        try:
+            df = pd.read_excel(excel_file, engine='openpyxl')
+            all_transactions.append(df)
+        except Exception as e:
+            print(f"  ⚠ Warning: Could not read {excel_file.name}: {e}")
     
+    if not all_transactions:
+        return 0
+    
+    # Combine all dataframes
+    combined_df = pd.concat(all_transactions, ignore_index=True)
+    
+    # Sort by date (convert to datetime for proper sorting)
+    try:
+        combined_df['Data_Sort'] = pd.to_datetime(combined_df['Data'], format='%d.%m.%Y')
+        combined_df = combined_df.sort_values('Data_Sort')
+        combined_df = combined_df.drop('Data_Sort', axis=1)
+    except Exception:
+        # If date parsing fails, keep original order
+        pass
+    
+    # Save combined file
+    combined_df.to_excel(output_path, index=False, engine='openpyxl')
+    
+    return len(combined_df)
+
+
+def process_single_pdf(pdf_path, output_path=None):
+    """
+    Process a single PDF file and convert to Excel.
+    
+    Args:
+        pdf_path: Path to the PDF file
+        output_path: Optional output path for Excel file
+        
+    Returns:
+        True if successful, False otherwise
+    """
     # Determine output path
-    if len(sys.argv) >= 3:
-        output_path = Path(sys.argv[2])
-    else:
+    if output_path is None:
         output_path = pdf_path.with_suffix('.xlsx')
     
-    print(f"Processing: {pdf_path}")
-    print(f"Output: {output_path}")
-    print("-" * 50)
+    print(f"Processing: {pdf_path.name}")
     
     try:
         # Extract transactions
         transactions = extract_transactions_from_pdf(pdf_path)
         
         if not transactions:
-            print("⚠ Warning: No transactions found in the PDF")
-            print("The PDF might have a different format or no readable text.")
-            sys.exit(1)
+            print(f"  ⚠ Warning: No transactions found in {pdf_path.name}")
+            return False
         
         # Save to Excel
         save_to_excel(transactions, output_path)
-        
-        print("-" * 50)
-        print(f"✓ Successfully converted {pdf_path.name}")
-        print(f"✓ Created: {output_path}")
+        print(f"  ✓ Created: {output_path.name}")
+        return True
         
     except Exception as e:
-        print(f"✗ Error processing PDF: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"  ✗ Error processing {pdf_path.name}: {e}")
+        return False
+
+
+def main():
+    """Main function to process PDF to Excel conversion."""
+    if len(sys.argv) < 2:
+        print("Usage: python pdf_to_xls.py <pdf_file_or_folder> [options]")
+        print("\nExamples:")
+        print("  Single file:")
+        print("    python pdf_to_xls.py statement.pdf")
+        print("    python pdf_to_xls.py statement.pdf output.xlsx")
+        print("\n  Process all PDFs in a folder:")
+        print("    python pdf_to_xls.py /path/to/folder")
+        print("\n  Process folder and merge into one file:")
+        print("    python pdf_to_xls.py /path/to/folder --merge")
+        print("    python pdf_to_xls.py /path/to/folder --merge combined.xlsx")
         sys.exit(1)
+    
+    # Check for --merge flag
+    merge_files = '--merge' in sys.argv
+    args = [arg for arg in sys.argv[1:] if arg != '--merge']
+    
+    if not args:
+        print("Error: No input path provided")
+        sys.exit(1)
+    
+    input_path = Path(args[0])
+    
+    if not input_path.exists():
+        print(f"Error: Path '{input_path}' not found")
+        sys.exit(1)
+    
+    # Check if input is a directory or file
+    if input_path.is_dir():
+        # Process all PDF files in the directory
+        pdf_files = sorted(input_path.glob('*.pdf'))
+        
+        if not pdf_files:
+            print(f"No PDF files found in '{input_path}'")
+            sys.exit(1)
+        
+        print(f"Found {len(pdf_files)} PDF file(s) in '{input_path}'")
+        print("=" * 50)
+        
+        successful = 0
+        failed = 0
+        created_excel_files = []
+        
+        for pdf_file in pdf_files:
+            success = process_single_pdf(pdf_file)
+            if success:
+                successful += 1
+                excel_file = pdf_file.with_suffix('.xlsx')
+                created_excel_files.append(excel_file)
+            else:
+                failed += 1
+            print("-" * 50)
+        
+        print("=" * 50)
+        print(f"Summary: {successful} successful, {failed} failed")
+        
+        # Merge files if requested
+        if merge_files and created_excel_files:
+            print("=" * 50)
+            print("Merging all Excel files into one combined file...")
+            
+            # Determine combined output path
+            if len(args) >= 2:
+                combined_output = Path(args[1])
+            else:
+                combined_output = input_path / 'combined_all_statements.xlsx'
+            
+            total_transactions = merge_excel_files(created_excel_files, combined_output)
+            
+            if total_transactions > 0:
+                print(f"✓ Combined {len(created_excel_files)} file(s) with {total_transactions} total transactions")
+                print(f"✓ Created: {combined_output}")
+            else:
+                print("✗ Failed to merge files")
+        
+        if failed > 0:
+            sys.exit(1)
+            
+    else:
+        # Process single file
+        if not input_path.suffix.lower() == '.pdf':
+            print(f"Error: '{input_path}' is not a PDF file")
+            sys.exit(1)
+        
+        # Determine output path
+        if len(args) >= 2:
+            output_path = Path(args[1])
+        else:
+            output_path = None
+        
+        print("=" * 50)
+        success = process_single_pdf(input_path, output_path)
+        print("=" * 50)
+        
+        if not success:
+            sys.exit(1)
 
 
 if __name__ == "__main__":
